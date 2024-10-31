@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Ability to disable animation of JPEG and HEIF live photos in the preferences
+- Ability to see and export activated extension keys
+- Ability to mark an entry as private on the media viewer screen
+
+### Fixed
+
+- Showing indeterminate background download progress (when Content-Length is not available) as 1%
+
+### Changed
+
+- For HEIF (HEIC) live photos, the video is now requested in HEVC
+  if the device supports this codec. This prevents transcoding to AVC
+
+## [1.31.1] - 2024-10-07
+
+### Added
+
+- Ability to delete a memory with a long press
+
+### Fixed
+
+- Search on the folders screen ignoring folder paths
+- Inability to focus the video timeline or the buttons using the "Down" button
+  on the media viewer screen
+- Inability to change the folder sorting on Android 12 and older
+
 ## [1.31.0] - 2024-09-28
 
 ### Added
@@ -15,14 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Made the file import more stable by retrying failed uploads
 - Made the file import faster by running uploads in parallel
-- Recently downloaded files are no longer re-downloaded 
+- Recently downloaded files are no longer re-downloaded
   when you want to share them or open them in another app once again
 - Extended the silent correction of PhotoPrism library page URLs during the connection.
   Now all the common `/library/` routes are being corrected
 
 ### Fixed
 
-- Crashing on screens with strings containing numbers 
+- Crashing on screens with strings containing numbers
   when the app language is French or Czech
 - Showing indeterminate download progress (when Content-Length is not available) as 1%
 
@@ -661,7 +691,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Library is not accessible" during the connection, when the entered root URL doesn't match the
   `PHOTOPRISM_SITE_URL` server config value
 
-[Unreleased]: https://github.com/Radiokot/photoprism-android-client/compare/1.31.0(46)...HEAD
+[Unreleased]: https://github.com/Radiokot/photoprism-android-client/compare/1.31.1(47)...HEAD
+
+[1.31.1]: https://github.com/Radiokot/photoprism-android-client/compare/1.31.0(46)...1.31.1(47)
 
 [1.31.0]: https://github.com/Radiokot/photoprism-android-client/compare/1.30.0(45)...1.31.0(46)
 

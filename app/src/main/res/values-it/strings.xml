@@ -254,5 +254,10 @@
     <string name="sort_order_oldest_first">Più vecchio prima</string>
     <string name="sort_order_recently_added">Aggiunto di recente</string>
     <string name="sort_favorites_first">Preferiti prima</string>
+    <string name="memory_deleting_confirmation">Eliminare questo ricordo?</string>
+    <string name="live_photos_as_images">Foto live come immagini</string>
+    <string name="live_photos_as_images_explanation">Non animare le foto live in formato JPEG o HEIF</string>
+    <string name="activated_keys">Chiavi attivate</string>
+    <string name="is_private">Privato</string>
 
 </resources>

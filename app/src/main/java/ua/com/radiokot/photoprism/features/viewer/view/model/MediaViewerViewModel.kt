@@ -8,32 +8,34 @@ import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.kotlin.subscribeBy
 import io.reactivex.rxjava3.schedulers.Schedulers
-import io.reactivex.rxjava3.subjects.BehaviorSubject
 import io.reactivex.rxjava3.subjects.PublishSubject
 import ua.com.radiokot.photoprism.extension.autoDispose
 import ua.com.radiokot.photoprism.extension.checkNotNull
 import ua.com.radiokot.photoprism.extension.kLogger
 import ua.com.radiokot.photoprism.extension.observeOnMain
 import ua.com.radiokot.photoprism.features.gallery.data.model.GalleryMedia
+import ua.com.radiokot.photoprism.features.gallery.data.storage.GalleryPreferences
 import ua.com.radiokot.photoprism.features.gallery.data.storage.SimpleGalleryMediaRepository
 import ua.com.radiokot.photoprism.features.gallery.logic.ArchiveGalleryMediaUseCase
 import ua.com.radiokot.photoprism.features.gallery.logic.DeleteGalleryMediaUseCase
 import ua.com.radiokot.photoprism.features.gallery.view.model.GalleryContentLoadingError
+import ua.com.radiokot.photoprism.features.gallery.view.model.MediaFileDownloadActionsViewModel
 import ua.com.radiokot.photoprism.features.gallery.view.model.MediaFileDownloadActionsViewModelDelegate
 import ua.com.radiokot.photoprism.features.viewer.logic.BackgroundMediaFileDownloadManager
-import ua.com.radiokot.photoprism.features.viewer.logic.SetGalleryMediaFavoriteUseCase
+import ua.com.radiokot.photoprism.features.viewer.logic.UpdateGalleryMediaAttributesUseCase
 import ua.com.radiokot.photoprism.util.LocalDate
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 class MediaViewerViewModel(
     private val galleryMediaRepositoryFactory: SimpleGalleryMediaRepository.Factory,
-    private val setGalleryMediaFavoriteUseCase: SetGalleryMediaFavoriteUseCase,
+    private val updateGalleryMediaAttributesUseCase: UpdateGalleryMediaAttributesUseCase,
     private val archiveGalleryMediaUseCase: ArchiveGalleryMediaUseCase,
     private val deleteGalleryMediaUseCase: DeleteGalleryMediaUseCase,
     private val mediaFilesActionsViewModel: MediaFileDownloadActionsViewModelDelegate,
+    private val galleryPreferences: GalleryPreferences,
 ) : ViewModel(),
-    MediaFileDownloadActionsViewModelDelegate by mediaFilesActionsViewModel {
+    MediaFileDownloadActionsViewModel by mediaFilesActionsViewModel {
 
     private val log = kLogger("MediaViewerVM")
     private lateinit var galleryMediaRepository: SimpleGalleryMediaRepository
@@ -42,6 +44,8 @@ class MediaViewerViewModel(
     private var isPageIndicatorEnabled = false
     private var staticSubtitle: String? = null
     private val currentLocalDate = LocalDate()
+    private var fileSelectionIntent: FileSelectionIntent? = null
+    private var itemToDelete: GalleryMedia? = null
 
     // Media that turned to be not viewable.
     private val afterAllNotViewableMedia = mutableSetOf<GalleryMedia>()
@@ -50,7 +54,6 @@ class MediaViewerViewModel(
     val itemsList: MutableLiveData<List<MediaViewerPage>?> = MutableLiveData(null)
     private val eventsSubject = PublishSubject.create<Event>()
     val events: Observable<Event> = eventsSubject.observeOnMain()
-    private val stateSubject = BehaviorSubject.createDefault<State>(State.Idle)
     val areActionsVisible: MutableLiveData<Boolean> = MutableLiveData(true)
     val isPageIndicatorVisible: MutableLiveData<Boolean> = MutableLiveData(false)
     val isToolbarVisible: MutableLiveData<Boolean> = MutableLiveData(true)
@@ -61,6 +64,7 @@ class MediaViewerViewModel(
     val title: MutableLiveData<String> = MutableLiveData()
     val subtitle: MutableLiveData<SubtitleValue> = MutableLiveData()
     val isFavorite: MutableLiveData<Boolean> = MutableLiveData()
+    val isPrivate: MutableLiveData<Boolean> = MutableLiveData()
 
     /**
      * Size of the image viewing area in px.
@@ -190,6 +194,7 @@ class MediaViewerViewModel(
                     MediaViewerPage.fromGalleryMedia(
                         source = galleryMedia,
                         imageViewSize = imageViewSize,
+                        livePhotosAsImages = galleryPreferences.livePhotosAsImages.value!!,
                     )
             }
             .also {
@@ -230,9 +235,8 @@ class MediaViewerViewModel(
             return
         }
 
-        stateSubject.onNext(State.Sharing)
-
         if (item.files.size > 1) {
+            fileSelectionIntent = FileSelectionIntent.SHARING
             openFileSelectionDialog(item.files)
         } else {
             downloadAndShareFile(item.files.firstOrNull().checkNotNull {
@@ -270,9 +274,8 @@ class MediaViewerViewModel(
                     "\nitem=$item"
         }
 
-        stateSubject.onNext(State.OpeningIn)
-
         if (item.files.size > 1) {
+            fileSelectionIntent = FileSelectionIntent.OPENING_IN
             openFileSelectionDialog(item.files)
         } else {
             downloadAndOpenFile(item.files.firstOrNull().checkNotNull {
@@ -353,43 +356,38 @@ class MediaViewerViewModel(
                     "\nitem=$item"
         }
 
-        stateSubject.onNext(State.Deleting(item))
+        itemToDelete = item
         eventsSubject.onNext(Event.OpenDeletingConfirmationDialog)
     }
 
     fun onDeletingConfirmed() {
-        val deletingState = checkNotNull(stateSubject.value as? State.Deleting) {
-            "Deleting can only be confirmed in the deleting state"
+        val itemToDelete = itemToDelete.checkNotNull {
+            "Confirming deletion when there's no item to delete"
         }
-
-        val item = deletingState.media
 
         log.debug {
             "onDeletingConfirmed(): deleting:" +
-                    "\nitem=$item"
+                    "\nitem=$itemToDelete"
         }
 
         deleteGalleryMediaUseCase
             .invoke(
-                mediaUid = item.uid,
+                mediaUid = itemToDelete.uid,
                 currentGalleryMediaRepository = galleryMediaRepository,
             )
             .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
-            .doOnSubscribe {
-                stateSubject.onNext(State.Idle)
-            }
             .subscribeBy(
                 onError = { error ->
                     log.error(error) {
                         "onDeletingConfirmed(): failed_deleting:" +
-                                "\nitem=$item"
+                                "\nitem=$itemToDelete"
                     }
                 },
                 onComplete = {
                     log.debug {
                         "onDeletingConfirmed(): successfully_deleted:" +
-                                "\nitem=$item"
+                                "\nitem=$itemToDelete"
                     }
                 }
             )
@@ -415,7 +413,14 @@ class MediaViewerViewModel(
                     "\nitem=$item"
         }
 
-        downloadToExternalStorage(item)
+        if (item.files.size > 1) {
+            fileSelectionIntent = FileSelectionIntent.DOWNLOADING
+            openFileSelectionDialog(item.files)
+        } else {
+            downloadFileToExternalStorageInBackground(item.files.firstOrNull().checkNotNull {
+                "There must be at least one file in the gallery media object"
+            })
+        }
     }
 
     fun onCancelDownloadClicked(position: Int) {
@@ -455,7 +460,7 @@ class MediaViewerViewModel(
                     "\ntoSetFavorite=$toSetFavorite"
         }
 
-        setGalleryMediaFavoriteUseCase
+        updateGalleryMediaAttributesUseCase
             .invoke(
                 mediaUid = item.uid,
                 isFavorite = toSetFavorite,
@@ -486,6 +491,54 @@ class MediaViewerViewModel(
             .autoDispose(this)
     }
 
+    fun onPrivateClicked(position: Int) {
+        val item = galleryMediaRepository.itemsList.getOrNull(position)
+
+        if (item == null) {
+            log.warn {
+                "onPrivateClicked(): position_out_of_range"
+            }
+            return
+        }
+
+        // Switch currently shown private state.
+        val toSetPrivate = isPrivate.value != true
+
+        log.debug {
+            "onPrivateClicked(): switching_private:" +
+                    "\nitem=$item," +
+                    "\ntoSetPrivate=$toSetPrivate"
+        }
+
+        updateGalleryMediaAttributesUseCase
+            .invoke(
+                mediaUid = item.uid,
+                isPrivate = toSetPrivate,
+                currentGalleryMediaRepository = galleryMediaRepository,
+            )
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribeBy(
+                onError = { error ->
+                    log.error(error) {
+                        "onPrivateClicked(): failed_switching_private:" +
+                                "\nitem=$item," +
+                                "\ntoSetPrivate=$toSetPrivate"
+                    }
+                },
+                onComplete = {
+                    log.debug {
+                        "onPrivateClicked(): successfully_switched_private:" +
+                                "\nitem=$item," +
+                                "\ntoSetPrivate=$toSetPrivate"
+                    }
+
+                    isPrivate.value = toSetPrivate
+                }
+            )
+            .autoDispose(this)
+    }
+
     fun onPageClicked() {
         log.debug { "onPageClicked(): toggling_full_screen" }
 
@@ -500,17 +553,6 @@ class MediaViewerViewModel(
             }
 
             this.isFullScreen.value = isFullScreen
-        }
-    }
-
-    private fun downloadToExternalStorage(media: GalleryMedia) {
-        if (media.files.size > 1) {
-            stateSubject.onNext(State.DownloadingToExternalStorage)
-            openFileSelectionDialog(media.files)
-        } else {
-            downloadFileToExternalStorageInBackground(media.files.firstOrNull().checkNotNull {
-                "There must be at least one file in the gallery media object"
-            })
         }
     }
 
@@ -529,18 +571,19 @@ class MediaViewerViewModel(
                     "\nfile=$file"
         }
 
-        when (stateSubject.value.checkNotNull()) {
-            State.Sharing ->
+        val intent = fileSelectionIntent.checkNotNull {
+            "File is selected when there's no intent"
+        }
+
+        when (intent) {
+            FileSelectionIntent.SHARING ->
                 downloadAndShareFile(file)
 
-            State.OpeningIn ->
+            FileSelectionIntent.OPENING_IN ->
                 downloadAndOpenFile(file)
 
-            State.DownloadingToExternalStorage ->
+            FileSelectionIntent.DOWNLOADING ->
                 downloadFileToExternalStorageInBackground(file)
-
-            else ->
-                error("Can't select files in ${stateSubject.value} state")
         }
     }
 
@@ -565,18 +608,12 @@ class MediaViewerViewModel(
     private fun downloadAndShareFile(file: GalleryMedia.File) {
         mediaFilesActionsViewModel.downloadAndShareMediaFiles(
             files = listOf(file),
-            onDownloadFinished = {
-                stateSubject.onNext(State.Idle)
-            }
         )
     }
 
     private fun downloadAndOpenFile(file: GalleryMedia.File) {
         mediaFilesActionsViewModel.downloadAndOpenMediaFile(
             file = file,
-            onDownloadFinished = {
-                stateSubject.onNext(State.Idle)
-            }
         )
     }
 
@@ -594,10 +631,7 @@ class MediaViewerViewModel(
                         mediaUid = file.mediaUid,
                     )
 
-
                 subscribeToMediaBackgroundDownloadStatus(progressObservable)
-
-                stateSubject.onNext(State.Idle)
 
                 eventsSubject.onNext(
                     Event.ShowStartedDownloadMessage(
@@ -631,6 +665,7 @@ class MediaViewerViewModel(
         )
         updateTitleAndSubtitle(item)
         isFavorite.value = item.isFavorite
+        isPrivate.value = item.isPrivate
 
         // When switching to a video (not live photo or GIF), go full screen if currently is not.
         if (item.media is GalleryMedia.TypeData.Video && isFullScreen.value == false) {
@@ -664,7 +699,10 @@ class MediaViewerViewModel(
 
                     if (status is BackgroundMediaFileDownloadManager.Status.InProgress) {
                         cancelDownloadButtonProgressPercent.value =
-                            status.percent.roundToInt().coerceAtLeast(1)
+                            if (status.percent < 0)
+                                -1
+                            else
+                                status.percent.roundToInt().coerceAtLeast(1)
                     }
                 },
             )
@@ -739,11 +777,10 @@ class MediaViewerViewModel(
         ) : Event
     }
 
-    private sealed interface State {
-        object Idle : State
-        object Sharing : State
-        object OpeningIn : State
-        class Deleting(val media: GalleryMedia) : State
-        object DownloadingToExternalStorage : State
+    private enum class FileSelectionIntent {
+        SHARING,
+        OPENING_IN,
+        DOWNLOADING,
+        ;
     }
 }

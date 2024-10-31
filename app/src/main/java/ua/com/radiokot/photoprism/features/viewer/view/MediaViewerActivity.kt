@@ -394,6 +394,7 @@ class MediaViewerActivity : BaseActivity() {
                 KeyEvent.KEYCODE_DPAD_RIGHT,
                 KeyEvent.KEYCODE_DPAD_LEFT,
                 KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN,
                 KeyEvent.KEYCODE_ENTER,
                 KeyEvent.KEYCODE_DPAD_CENTER,
             ) || keyCode in setOf(
@@ -465,6 +466,15 @@ class MediaViewerActivity : BaseActivity() {
                 }
 
                 viewModel.onPageClicked()
+            }
+
+            KeyEvent.KEYCODE_DPAD_DOWN -> {
+                log.debug {
+                    "initKeyboardNavigation(): focus_buttons:" +
+                            "\nkey=down"
+                }
+
+                view.buttonsLayout.requestFocus(View.FOCUS_DOWN)
             }
         }
 
@@ -539,9 +549,16 @@ class MediaViewerActivity : BaseActivity() {
         val actionItems = listOf(
             menu.findItem(R.id.archive),
             menu.findItem(R.id.delete),
+            menu.findItem(R.id.is_private),
         )
         viewModel.areActionsVisible.observe(this) { areActionsVisible ->
             actionItems.forEach { it.isVisible = areActionsVisible }
+        }
+
+        with(menu.findItem(R.id.is_private)) {
+            viewModel.isPrivate.observe(this@MediaViewerActivity) { isPrivate ->
+                isChecked = isPrivate
+            }
         }
 
         return super.onCreateOptionsMenu(menu)
@@ -578,6 +595,13 @@ class MediaViewerActivity : BaseActivity() {
 
         R.id.delete -> {
             viewModel.onDeleteClicked(
+                position = view.viewPager.currentItem
+            )
+            true
+        }
+
+        R.id.is_private -> {
+            viewModel.onPrivateClicked(
                 position = view.viewPager.currentItem
             )
             true

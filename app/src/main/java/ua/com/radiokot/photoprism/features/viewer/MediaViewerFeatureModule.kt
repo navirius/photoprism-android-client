@@ -1,4 +1,4 @@
-package ua.com.radiokot.photoprism.features.viewer.di
+package ua.com.radiokot.photoprism.features.viewer
 
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
@@ -6,7 +6,6 @@ import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
-import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.androidx.viewmodel.dsl.viewModelOf
 import org.koin.core.module.dsl.scopedOf
 import org.koin.core.qualifier._q
@@ -19,7 +18,7 @@ import ua.com.radiokot.photoprism.di.VIDEO_CACHE_DIRECTORY
 import ua.com.radiokot.photoprism.env.data.model.EnvSession
 import ua.com.radiokot.photoprism.features.gallery.di.galleryFeatureModule
 import ua.com.radiokot.photoprism.features.viewer.logic.DefaultVideoPlayerFactory
-import ua.com.radiokot.photoprism.features.viewer.logic.SetGalleryMediaFavoriteUseCase
+import ua.com.radiokot.photoprism.features.viewer.logic.UpdateGalleryMediaAttributesUseCase
 import ua.com.radiokot.photoprism.features.viewer.logic.VideoPlayerFactory
 import ua.com.radiokot.photoprism.features.viewer.view.model.MediaViewerViewModel
 import ua.com.radiokot.photoprism.features.viewer.view.model.VideoPlayerCacheViewModel
@@ -44,15 +43,7 @@ val mediaViewerFeatureModule = module {
     } bind Cache::class
 
     scope<EnvSession> {
-        viewModel {
-            MediaViewerViewModel(
-                galleryMediaRepositoryFactory = get(),
-                setGalleryMediaFavoriteUseCase = get(),
-                archiveGalleryMediaUseCase = get(),
-                deleteGalleryMediaUseCase = get(),
-                mediaFilesActionsViewModel = get(),
-            )
-        }
+        viewModelOf(::MediaViewerViewModel)
 
         scoped {
             val session = get<EnvSession>()
@@ -77,6 +68,6 @@ val mediaViewerFeatureModule = module {
 
         viewModelOf(::VideoPlayerCacheViewModel)
 
-        scopedOf(::SetGalleryMediaFavoriteUseCase)
+        scopedOf(::UpdateGalleryMediaAttributesUseCase)
     }
 }

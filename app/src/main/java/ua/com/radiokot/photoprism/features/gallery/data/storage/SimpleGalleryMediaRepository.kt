@@ -10,6 +10,7 @@ import io.reactivex.rxjava3.schedulers.Schedulers
 import kotlinx.parcelize.Parcelize
 import ua.com.radiokot.photoprism.api.model.PhotoPrismOrder
 import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismBatchPhotoUids
+import ua.com.radiokot.photoprism.api.photos.model.PhotoPrismPhotoUpdate
 import ua.com.radiokot.photoprism.api.photos.service.PhotoPrismPhotosService
 import ua.com.radiokot.photoprism.base.data.model.DataPage
 import ua.com.radiokot.photoprism.base.data.model.PagingOrder
@@ -233,14 +234,18 @@ class SimpleGalleryMediaRepository(
         }
     }
 
-    fun setFavorite(
+    fun updateAttributes(
         itemUid: String,
-        isFavorite: Boolean,
+        isFavorite: Boolean? = null,
+        isPrivate: Boolean? = null,
     ): Completable = {
-        if (isFavorite)
-            photoPrismPhotosService.likePhoto(itemUid)
-        else
-            photoPrismPhotosService.dislikePhoto(itemUid)
+        photoPrismPhotosService.updatePhoto(
+            photoUid = itemUid,
+            update = PhotoPrismPhotoUpdate(
+                favorite = isFavorite,
+                private = isPrivate,
+            ),
+        )
     }
         .toCompletable()
         .doOnComplete {
@@ -248,7 +253,9 @@ class SimpleGalleryMediaRepository(
                 .find { it.uid == itemUid }
                 ?.also { itemToChange ->
                     // Update the state locally.
-                    itemToChange.isFavorite = isFavorite
+                    isFavorite?.also(itemToChange::isFavorite::set)
+                    isPrivate?.also(itemToChange::isPrivate::set)
+
                     broadcast()
                 }
         }
