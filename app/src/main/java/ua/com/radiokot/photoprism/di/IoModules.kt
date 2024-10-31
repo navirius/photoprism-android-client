@@ -30,7 +30,11 @@ import ua.com.radiokot.photoprism.api.util.HeaderInterceptor
 import ua.com.radiokot.photoprism.util.LocalDate
 import ua.com.radiokot.photoprism.util.WebViewCookieJar
 import java.io.File
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 typealias HttpClient = OkHttpClient
 typealias JsonObjectMapper = ObjectMapper
@@ -41,6 +45,10 @@ const val INTERNAL_EXPORT_DIRECTORY = "internal-export"
 const val VIDEO_CACHE_DIRECTORY = "video-cache"
 const val IMAGE_CACHE_DIRECTORY = "image-cache"
 const val APP_NO_BACKUP_PREFERENCES = "app-no-backup-preferences"
+
+
+
+
 
 val ioModules: List<Module> = listOf(
     // JSON
@@ -89,8 +97,30 @@ val ioModules: List<Module> = listOf(
         // like Authelia, Umbrel, Cloudflare, etc.
         singleOf(::WebViewCookieJar) bind CookieJar::class
 
+        /// todo add self sign accept
+        val trustAllCert = arrayOf<TrustManager>(object : X509TrustManager{
+            override fun checkClientTrusted(
+                chain: Array<out X509Certificate>?,
+                authType: String?
+            ) {}
+
+            override fun checkServerTrusted(
+                chain: Array<out X509Certificate>?,
+                authType: String?
+            ) {}
+
+            override fun getAcceptedIssuers() = arrayOf<X509Certificate>()
+        })
+        val sslContext = SSLContext.getInstance("SSL")
+        sslContext.init(null, trustAllCert, java.security.SecureRandom())
+
+        // Create an ssl socket factory with our all-trusting manager
+        val sslSocketFactory = sslContext.socketFactory
+
         factory {
             OkHttpClient.Builder()
+                .sslSocketFactory(sslSocketFactory, trustAllCert[0] as X509TrustManager)
+                .hostnameVerifier{_,_ -> true}
                 // Connect timeout to cut off dead network.
                 .connectTimeout(30, TimeUnit.SECONDS)
                 // Read and write timeouts are big because PhotoPrism
